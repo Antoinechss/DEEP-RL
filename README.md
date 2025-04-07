@@ -28,7 +28,7 @@ Modified from already built [DQN framework for SUMO](https://github.com/romaindu
 
 **Task** = transitionning from DQN to Policy Based : 
 
-- Action selection : Sample from pi(a,s)
+- Action selection : Sample from $\pi(a,s)$
 - On policy training step (uses episode trajectory)
 - Loss function = policy gradient
 - Policy network (probabilities instead of values)
