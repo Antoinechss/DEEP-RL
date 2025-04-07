@@ -9,7 +9,7 @@ This project aims at implementing a REINFORCE agent and visualize its effectiven
 
 - [`ReinforceAgent_CNN.py`](models/ReinforceAgent_CNN.py) : CNN version for discrete tensor input (image treatment). Tested on [`MiniGrid-Empty-5x5-v0`](https://minigrid.farama.org/environments/minigrid/empty/)
 
-Visualize reward with tensorboard by running in terminal : 
+You can monitor reward with tensorboard by running in terminal : 
 $ tensorboard --logdir=runs/reinforce
 
 **STEP #2** : Integration into SUMO environment for traffic control at an intersection 
