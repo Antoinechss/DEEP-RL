@@ -25,3 +25,11 @@ tensorboard --logdir=runs/reinforce
 See [SUMO documentation](https://sumo.dlr.de/docs/index.html)
 
 Modified from already built [DQN framework for SUMO](https://github.com/romainducrocq/DQN-ITSCwPD.git) by Ducrocq Romain 
+
+**Task** = transitionning from DQN to Policy Based : 
+
+- Action selection : Sample from pi(a,s)
+- On policy training step (uses episode trajectory)
+- Loss function = policy gradient
+- Policy network (probabilities instead of values)
+- Output = probability distribution over actions 
