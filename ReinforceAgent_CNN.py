@@ -156,7 +156,7 @@ def make_train_env():
     return env
 
 # ----------------------------
-# Manual Test 
+# Manual Test
 # ----------------------------
 
 # Training phase
@@ -165,7 +165,7 @@ agent = ReinforceAgent(train_env, gamma=gamma, lr=lr)
 agent.train(num_episodes=500)
 train_env.close()
 
-# Testing phase (visualize with GUI) 
+# Testing phase (visualize with GUI)
 gui_env = gym.make("MiniGrid-Empty-5x5-v0", render_mode="human")
 agent.env = gui_env
 agent.generate_episode(render=True)
