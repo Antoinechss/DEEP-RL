@@ -1,5 +1,5 @@
-# DEEP REINFORCEMENT LEARNING
-Implementation of a reinforce agent for traffic control at road intersections 
+# REINFORCEMENT LEARNING - Intelligent Traffic Signal Control with Partial Detection
+Implementation of the REINFORCE Deep RL algorithm for traffic control at road intersections 
 
 This project aims at implementing a REINFORCE agent and visualize its effectiveness in various applications. 
 
