@@ -24,5 +24,4 @@ tensorboard --logdir=runs/reinforce
 
 See [SUMO documentation](https://sumo.dlr.de/docs/index.html)
 
-Modified from already built [DQN framework for SUMO](https://github.com/romainducrocq/DQN-ITSCwPD.git) by Ducrocq Romain 
 
