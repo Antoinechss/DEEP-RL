@@ -7,11 +7,12 @@ import shutil
 from torch.utils.tensorboard import SummaryWriter
 
 # ----------------------------
-# Hyperparameters
+# Tuning agent's hyperparameters
 # ----------------------------
-gamma = 0.99
-lr = 0.001
-num_episodes = 100000
+
+gamma = 0.99 # reward decay over time
+lr = 0.001 # learning rate
+num_episodes = 100000 # max number of episodes
 
 # ----------------------------
 # MLP Policy Network
@@ -20,17 +21,18 @@ num_episodes = 100000
 class PolicyNetwork(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(PolicyNetwork, self).__init__()
-        self.fc1 = nn.Linear(state_dim,128)
+        self.fc1 = nn.Linear(state_dim,128)  # creating fully connected layers
         self.fc2 = nn.Linear(128, action_dim)
 
     def forward(self, state):
-        x = F.relu(self.fc1(state))
-        action_probs = F.softmax(self.fc2(x), dim=-1)
+        x = F.relu(self.fc1(state)) # computing rewards
+        action_probs = F.softmax(self.fc2(x), dim=-1) # translating rewards into a probability distribution
         return action_probs
 
 # ----------------------------
 # REINFORCE Agent
 # ----------------------------
+
 class ReinforceAgent:
     def __init__(self, env, gamma, lr):
         self.env = env
