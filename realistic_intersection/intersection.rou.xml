@@ -1,0 +1,15 @@
+<routes>
+    <vType id="car" accel="2.6" decel="4.5" length="5" minGap="2.5" maxSpeed="13.9" sigma="0.5"/>
+
+    <!-- Define routes -->
+    <route id="r1" edges="N2C C2S"/> <!-- North to South -->
+    <route id="r2" edges="W2C C2E"/> <!-- West to East -->
+    <route id="r3" edges="S2C C2N"/> <!-- South to North -->
+    <route id="r4" edges="E2C C2W"/> <!-- East to West -->
+
+    <!-- Traffic Flows: continuous vehicle generation -->
+    <flow id="north_south" type="car" route="r1" begin="0" end="200" vehsPerHour="600"/>
+    <flow id="west_east"  type="car" route="r2" begin="0" end="200" vehsPerHour="600"/>
+    <flow id="south_north" type="car" route="r3" begin="0" end="200" vehsPerHour="600"/>
+    <flow id="east_west"  type="car" route="r4" begin="0" end="200" vehsPerHour="600"/>
+</routes>
