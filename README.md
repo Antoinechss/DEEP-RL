@@ -24,4 +24,13 @@ tensorboard --logdir=runs/reinforce
 
 See [SUMO documentation](https://sumo.dlr.de/docs/index.html)
 
+**Key Performance Indicators** (computed after each phase selection) : 
+
+1/ **Accumulated waiting time** : total sum of cumulative waiting times since insertion for all incoming vehicles
+2/ **Delay** : the total sum of immediate delays for all incoming vehicles
+3/ **Queue length** : the total number of waiting incoming vehicles
+4/ **Volume** : total number of incoming vehicles
+
+
+
 
