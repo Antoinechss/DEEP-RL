@@ -13,7 +13,7 @@ scheduler = TlScheduler(tp_min=15, tl_ids=["gneJ1"])
 
 
 class SumoIntersectionEnv(gym.Env):
-    def __init__(self, sumo_cfg_path, use_gui=False, max_steps=1000):
+    def __init__(self, sumo_cfg_path, use_gui=False, max_steps=500):
         super().__init__()
         self.sumo_cfg = sumo_cfg_path
         self.use_gui = use_gui # for visualization
@@ -21,6 +21,7 @@ class SumoIntersectionEnv(gym.Env):
         self.step_count = 0
         self.vmax = 13.89 # max speed 50km/h default
         self.last_tsd = 1e-6
+        self.tsd_max = 1e-6  # Initialize to a small non-zero value
 
         self.sumo_binary = "sumo-gui" if use_gui else "sumo" # choice of visualization
         self.tls_id = "gneJ1"  # traffic light ID ("C" for center traffic light)
@@ -33,7 +34,13 @@ class SumoIntersectionEnv(gym.Env):
 
         # Observation: e.g. waiting time per controlled lane
         self.controlled_lanes = traci.trafficlight.getControlledLanes(self.tls_id)
-        self.observation_space = Box(low=0, high=1000, shape=(len(self.controlled_lanes),), dtype=np.float32)
+        self.observation_space = Box(low=0, high=1000, shape=(len(self.controlled_lanes)*3+2,), dtype=np.float32)
+
+        self.prev_tsd = 1e-6  # pour éviter division par zéro
+
+        print("\n🔎 Phase descriptions for traffic light:", self.tls_id)
+        for i, phase in enumerate(traci.trafficlight.getAllProgramLogics(self.tls_id)[0].phases):
+            print(f"Phase {i}: duration={phase.duration}, state='{phase.state}'")
 
     def _start_sumo(self):
         traci.start([
@@ -52,6 +59,23 @@ class SumoIntersectionEnv(gym.Env):
         scheduler.reset()
         return self._get_obs(), {}
 
+    def compute_reward(self):
+        tsd = 0.0
+        for vid in traci.vehicle.getIDList():
+            try:
+                v = traci.vehicle.getSpeed(vid)
+                delay = max(0.0, 1.0 - (v / self.vmax))
+                tsd += delay ** 2
+            except:
+                pass
+
+        # Update tsd_max
+        self.tsd_max = max(self.tsd_max, tsd)
+
+        # Compute normalized reward
+        reward = 1.0 - (tsd / self.tsd_max)
+        return reward
+
     def step(self, action):
         # Check if cooldown phase is terminated
         if scheduler.can_act(self.tls_id):
@@ -59,7 +83,7 @@ class SumoIntersectionEnv(gym.Env):
             scheduler.set_cooldown(self.tls_id)
 
         # Advance the simulation
-        for _ in range(10):  # Simulate 10 steps per decision
+        for _ in range(5):  # Simulate 5 steps per decision
             scheduler.step()  # Update cooldowns every real step
             traci.simulationStep()
             self.step_count += 1
@@ -69,31 +93,60 @@ class SumoIntersectionEnv(gym.Env):
         # ---------------------
         # Computing total squared delay (TSD) reward at every step
         # ---------------------
-        vehicle_ids = traci.vehicle.getIDList()
-        tsd = 0.0
 
-        for vid in vehicle_ids:
-            try:
-                v = traci.vehicle.getSpeed(vid) # getting vehicle speed at particular step
-                delay = 1.0 - (v / self.vmax) # delay rate compared to max possible speed
-                tsd += delay ** 2 # compute sum of squares
-            except traci.TraCIException:
-                pass  # in case a vehicle disappears this step
+        reward = self.compute_reward()
 
-        tsd_max = max(tsd, self.last_tsd)
-        self.last_tsd = tsd_max  # update memory
-
-        reward = 1.0 - (tsd / tsd_max if tsd_max > 0 else 0.0)
         terminated = self.step_count >= self.max_steps
         truncated = False
 
         return obs, reward, terminated, truncated, {}
 
     def _get_obs(self):
-        return np.array([traci.lane.getWaitingTime(l) for l in self.controlled_lanes], dtype=np.float32)
+        obs = []
+        for lane in self.controlled_lanes:
+            waiting_time = traci.lane.getWaitingTime(lane)
+            num_vehicles = traci.lane.getLastStepVehicleNumber(lane)
+            mean_speed = traci.lane.getLastStepMeanSpeed(lane)
+            obs.extend([waiting_time, num_vehicles, mean_speed])
+
+        # Phase actuelle + temps écoulé dans la phase
+        current_phase = traci.trafficlight.getPhase(self.tls_id)
+        time_in_phase = scheduler.time_in_phase[self.tls_id]
+
+        obs.append(current_phase)
+        obs.append(time_in_phase)
+
+        return np.array(obs, dtype=np.float32)
 
     def render(self):
         pass  # GUI does this
+
+    def get_kpis(self):
+        lanes = self.controlled_lanes
+        total_waiting_time = sum(traci.lane.getWaitingTime(l) for l in lanes)
+        total_delay = 0.0
+        total_queue_length = sum(traci.lane.getLastStepHaltingNumber(l) for l in lanes)
+        total_volume = len(traci.vehicle.getIDList())
+
+        for vid in traci.vehicle.getIDList():
+            try:
+                v = traci.vehicle.getSpeed(vid)
+                delay = 1.0 - (v / self.vmax)
+                total_delay += delay
+            except:
+                pass
+
+        emergency_brakes = traci.simulation.getEmergencyStoppingVehiclesNumber()
+        teleports = traci.simulation.getStartingTeleportNumber()
+
+        return {
+            "waiting_time": total_waiting_time,
+            "delay": total_delay,
+            "queue_length": total_queue_length,
+            "volume": total_volume,
+            "emergency_brakes": emergency_brakes,
+            "teleports": teleports
+        }
 
     def close(self):
         traci.close()
