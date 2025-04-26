@@ -5,6 +5,8 @@ import torch.nn.functional as F
 import os
 import shutil
 from torch.utils.tensorboard import SummaryWriter
+from collections import Counter
+import csv
 
 # ----------------------------
 # Tuning agent's hyperparameters
@@ -12,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 gamma = 0.99 # reward decay over time
 lr = 0.001 # learning rate
-num_episodes = 100000 # max number of episodes
+num_episodes = 2000 # max number of episodes
 
 # ----------------------------
 # MLP Policy Network
@@ -44,6 +46,13 @@ class ReinforceAgent:
         self.policy = PolicyNetwork(self.state_dim, self.action_dim)
         self.optimizer = optim.Adam(self.policy.parameters(), lr=lr)
 
+        self.phase_counts = Counter()
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+            nn.init.zeros_(m.bias)
+
     def generate_episode(self, render=False):
         log_probs = []
         rewards = []
@@ -61,9 +70,11 @@ class ReinforceAgent:
             action_dist = torch.distributions.Categorical(action_probs)
             action = action_dist.sample()
 
+            self.phase_counts[action.item()] += 1
             log_probs.append(action_dist.log_prob(action))
             state, reward, done, truncated, _ = self.env.step(action.item())
             rewards.append(reward)
+
 
         return log_probs, rewards
 
@@ -77,37 +88,73 @@ class ReinforceAgent:
 
     def update_policy(self, log_probs, returns):
         """
-        Updates agent's policy after every episode using backpropagation
+        Updates agent's policy after every episode using advantage and normalization.
         """
-        loss = sum(-log_prob * G for log_prob, G in zip(log_probs, returns))
+        # Baseline: moyenne des returns
+        baseline = torch.mean(returns)
+
+        # Avantage = return - baseline
+        advantages = returns - baseline
+
+        # Normalisation des avantages
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        # Loss = somme des log_probs * avantages
+        loss = -torch.sum(torch.stack([
+            log_prob * advantage
+            for log_prob, advantage in zip(log_probs, advantages)
+        ]))
+
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
     def train(self, num_episodes, save_path="reinforce_agent.pth", log_dir="runs/reinforce"):
-        if os.path.exists(log_dir): # checking if a saved agent exists
-            # deleting old files to refresh training logs
+        # Réinitialise les logs TensorBoard
+
+
+        if os.path.exists(log_dir):
             shutil.rmtree(log_dir)
             print(f"Old TensorBoard logs removed from {log_dir}")
+
+        # Réinitialise le fichier KPI CSV
+        with open("kpis.csv", mode="w", newline="") as file:
+            csv_writer = csv.writer(file)
+            csv_writer.writerow(["Episode", "WaitingTime", "Delay", "QueueLength", "Volume"])
+            print("kpis.csv has been reset.")
 
         writer = SummaryWriter(log_dir=log_dir)
         best_reward = -float("inf") # initialize best reward as default
 
         for episode in range(num_episodes):
-            log_probs, rewards = self.generate_episode() # compute proba distribution and rewards R1...Rn
+            log_probs, rewards = self.generate_episode()
             returns = self.compute_discounted_returns(rewards)
-            returns = (returns - returns.mean()) / (returns.std() + 1e-8) # normalize result
             self.update_policy(log_probs, returns)
 
-            # Tracking cumulated rewards over the episodes iterations (for tensorboard visualization)
             total_reward = sum(rewards)
             writer.add_scalar("Total Reward", total_reward, episode)
 
-            # Displaying reward every 10 episode for training visualization
-            if episode % 10 == 0:
-                print(f"Episode {episode}: Total Reward = {total_reward}")
+            # KPI LOGGING
+            kpis = self.env.get_kpis()
+            writer.add_scalar("KPI/WaitingTime", kpis["waiting_time"], episode)
+            writer.add_scalar("KPI/Delay", kpis["delay"], episode)
+            writer.add_scalar("KPI/QueueLength", kpis["queue_length"], episode)
+            writer.add_scalar("KPI/Volume", kpis["volume"], episode)
 
-            # Updating reward
+            with open("kpis.csv", mode="a", newline="") as file:
+                csv_writer = csv.writer(file)
+                csv_writer.writerow([
+                    episode,
+                    kpis["waiting_time"],
+                    kpis["delay"],
+                    kpis["queue_length"],
+                    kpis["volume"]
+                ])
+
+            if episode % 10 == 0:
+                print(f"Episode {episode} | Reward: {total_reward:.2f}")
+                print(f"Phase usage so far: {dict(self.phase_counts)}")
+
             if total_reward > best_reward:
                 best_reward = total_reward
                 torch.save(self.policy.state_dict(), save_path)
