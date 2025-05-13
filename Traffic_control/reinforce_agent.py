@@ -5,7 +5,6 @@ import torch.nn.functional as F
 import os
 import shutil
 from torch.utils.tensorboard import SummaryWriter
-from collections import Counter
 import csv
 
 # ----------------------------
@@ -27,8 +26,8 @@ class PolicyNetwork(nn.Module):
         self.fc2 = nn.Linear(128, action_dim)
 
     def forward(self, state):
-        x = F.relu(self.fc1(state)) # computing rewards
-        action_probs = F.softmax(self.fc2(x), dim=-1) # translating rewards into a probability distribution
+        x = F.relu(self.fc1(state)) # computing hidden activation
+        action_probs = F.softmax(self.fc2(x), dim=-1) # translating outputs into a probability distribution
         return action_probs
 
 # ----------------------------
@@ -45,13 +44,6 @@ class ReinforceAgent:
         self.action_dim = env.action_space.n
         self.policy = PolicyNetwork(self.state_dim, self.action_dim)
         self.optimizer = optim.Adam(self.policy.parameters(), lr=lr)
-
-        self.phase_counts = Counter()
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
-            nn.init.zeros_(m.bias)
 
     def generate_episode(self, render=False):
         log_probs = []
@@ -70,11 +62,9 @@ class ReinforceAgent:
             action_dist = torch.distributions.Categorical(action_probs)
             action = action_dist.sample()
 
-            self.phase_counts[action.item()] += 1
             log_probs.append(action_dist.log_prob(action))
             state, reward, done, truncated, _ = self.env.step(action.item())
             rewards.append(reward)
-
 
         return log_probs, rewards
 
@@ -87,19 +77,16 @@ class ReinforceAgent:
         return torch.tensor(G, dtype=torch.float32)
 
     def update_policy(self, log_probs, returns):
-        """
-        Updates agent's policy after every episode using advantage and normalization.
-        """
-        # Baseline: moyenne des returns
+        # Baseline: average of returns
         baseline = torch.mean(returns)
 
-        # Avantage = return - baseline
+        # Advantage = return - baseline
         advantages = returns - baseline
 
-        # Normalisation des avantages
+        # Normalization of advantages
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        # Loss = somme des log_probs * avantages
+        # Loss = sum of (log_probs * advantages)
         loss = -torch.sum(torch.stack([
             log_prob * advantage
             for log_prob, advantage in zip(log_probs, advantages)
@@ -110,14 +97,12 @@ class ReinforceAgent:
         self.optimizer.step()
 
     def train(self, num_episodes, save_path="reinforce_agent.pth", log_dir="runs/reinforce"):
-        # Réinitialise les logs TensorBoard
-
-
+        # Reset TensorBoard logs
         if os.path.exists(log_dir):
             shutil.rmtree(log_dir)
             print(f"Old TensorBoard logs removed from {log_dir}")
 
-        # Réinitialise le fichier KPI CSV
+        # Reset KPI CSV file
         with open("kpis.csv", mode="w", newline="") as file:
             csv_writer = csv.writer(file)
             csv_writer.writerow(["Episode", "WaitingTime", "Delay", "QueueLength", "Volume"])
@@ -153,19 +138,17 @@ class ReinforceAgent:
 
             if episode % 10 == 0:
                 print(f"Episode {episode} | Reward: {total_reward:.2f}")
-                print(f"Phase usage so far: {dict(self.phase_counts)}")
 
-            if total_reward > best_reward:
+            if total_reward > best_reward and kpis.get("teleports", 0) == 0:
                 best_reward = total_reward
                 torch.save(self.policy.state_dict(), save_path)
                 print(f"Model saved at Episode {episode} with Reward {best_reward}")
 
-        writer.close() # exit metrics logging window
-
+        writer.close()
 
     def load_model(self, save_path="reinforce_agent.pth"):
         """
-        Saves the trained agent as a reinforce_agent file
+        Loads the trained agent from a saved file.
         """
         self.policy.load_state_dict(torch.load(save_path))
         print("Model loaded successfully!")
